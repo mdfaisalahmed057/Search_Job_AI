@@ -1,0 +1,8 @@
+Flask
+flask-cors
+PyMuPDF
+python-docx
+google-generativeai
+requests
+beautifulsoup4
+concurrent-futures
