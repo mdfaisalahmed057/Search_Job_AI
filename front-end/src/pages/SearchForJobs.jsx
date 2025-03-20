@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { SparklesCore } from '../components/Sparkles';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 function SearchForJobs() {
@@ -69,7 +68,7 @@ function SearchForJobs() {
         num_jobs: parseInt(searchParams.num_jobs)
       };
       
-      const response = await fetch('http://127.0.0.1:5000/api/jobs', {
+      const response = await fetch('https://backend-for-job-scrap.onrender.com/api/jobs', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -97,8 +96,8 @@ function SearchForJobs() {
     }
   };
 
-  const copyToClipboard = (text, jobId) => {
-    navigator.clipboard.writeText(text)
+  const copyToClipboard = (url, jobId) => {
+    navigator.clipboard.writeText(url)
       .then(() => {
         document.getElementById(`copy-btn-${jobId}`).classList.add('text-green-300');
         setTimeout(() => {
@@ -108,6 +107,17 @@ function SearchForJobs() {
       .catch(err => {
         console.error('Failed to copy:', err);
       });
+  };
+
+  // Generate a random match percentage for demo purposes
+  const getRandomMatchPercentage = () => {
+    return Math.floor(70 + Math.random() * 30);
+  };
+
+  // Format date to more readable format
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
   return (
@@ -248,6 +258,28 @@ function SearchForJobs() {
                   </span>
                 </div>
               </div>
+
+              {/* Failed Requests Section (if any) */}
+              {jobResults.failed_requests && jobResults.failed_requests.length > 0 && (
+  <div className="mb-6 p-4 bg-red-500/20 border border-red-500/30 rounded-lg">
+    <h4 className="text-white text-md font-semibold mb-2">Some sources couldn't be reached:</h4>
+    <ul className="text-sm text-gray-300">
+      {jobResults.failed_requests.map((failure, index) => (
+        <li key={index} className="mb-1">
+          {failure.portal}: {failure.message} (Status: {failure.status})
+          <a 
+            href={failure.url} 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            className="ml-2 inline-block px-2 py-1 bg-gray-700 hover:bg-gray-600 text-white text-xs font-medium rounded transition-colors"
+          >
+            Try Manually
+          </a>
+        </li>
+      ))}
+    </ul>
+  </div>
+)}
               
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {jobResults.jobs.map((job, index) => (
@@ -290,11 +322,11 @@ function SearchForJobs() {
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                           </svg>
-                          <span>Posted: {new Date(job.posting_date).toLocaleDateString()}</span>
+                          <span>Posted: {formatDate(job.posting_date)}</span>
                         </div>
                       </div>
   
-                      {job.required_skills.length > 0 && (
+                      {job.required_skills && job.required_skills.length > 0 && (
                         <div className="mb-4">
                           <p className="text-sm text-white mb-2">Required Skills:</p>
                           <div className="flex flex-wrap gap-2">
@@ -307,25 +339,7 @@ function SearchForJobs() {
                         </div>
                       )}
   
-                      <div className="mb-4">
-                        <p className="text-sm text-white mb-2">Cover Letter:</p>
-                        <div className="bg-black/30 p-3 rounded-md flex justify-between items-center">
-                          <p className="text-gray-300 text-sm">
-                            {job.cover_letter.split(' ').slice(0, 8).join(' ')}...
-                          </p>
-                          <button 
-                            id={`copy-btn-${index}`}
-                            onClick={() => copyToClipboard(job.cover_letter, index)}
-                            className="ml-2 text-purple-400 hover:text-purple-300 transition-colors focus:outline-none group"
-                            title="Copy cover letter"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                            </svg>
-                            <span className="hidden group-hover:block absolute -mt-8 -ml-6 bg-black/80 text-xs text-white px-2 py-1 rounded">Copy</span>
-                          </button>
-                        </div>
-                      </div>
+                      {/* Remove cover letter section since it's not in the data */}
   
                       <div className="mt-4 flex justify-between items-center">
                         <a 
@@ -341,8 +355,23 @@ function SearchForJobs() {
                         </a>
   
                         <span className="text-xs text-gray-400">
-                          Match: {Math.floor(70 + Math.random() * 30)}%
+                          Match: {getRandomMatchPercentage()}%
                         </span>
+                      </div>
+
+                      {/* Add URL copy button */}
+                      <div className="mt-3 flex justify-end">
+                        <button 
+                          id={`copy-btn-${index}`}
+                          onClick={() => copyToClipboard(job.application_link, index)}
+                          className="text-xs text-purple-400 hover:text-purple-300 transition-colors focus:outline-none flex items-center"
+                          title="Copy job link"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          </svg>
+                          Copy Link
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -369,6 +398,17 @@ function SearchForJobs() {
                 </div>
               )}
   
+              {/* Processed query info */}
+              {jobResults && jobResults.processed_query && (
+                <div className="mt-8 p-4 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+                  <h4 className="text-white text-sm font-semibold mb-2">Search Details:</h4>
+                  <div className="text-xs text-gray-300">
+                    <p>Role: {jobResults.processed_query.role}</p>
+                    <p>Location: {jobResults.processed_query.location}</p>
+                    <p>Skills: {jobResults.processed_query.skills.join(', ')}</p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div> {/* Closes .w-full max-w-5xl */}

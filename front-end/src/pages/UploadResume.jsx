@@ -22,7 +22,7 @@ function UploadResume() {
       const formData = new FormData();
       formData.append('file', file); // Make sure to use 'file' as the key name to match the API expectation
       
-      const response = await fetch('http://127.0.0.1:5000/extract_resume', {
+      const response = await fetch('https://backend-for-job-scrap.onrender.com/extract_resume', {
         method: 'POST',
         body: formData,
         // Don't set Content-Type header when using FormData
