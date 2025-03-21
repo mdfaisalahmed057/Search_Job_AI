@@ -1,11 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SparklesCore } from '../components/Sparkles';
 import { useDropzone } from 'react-dropzone';
 import { useNavigate } from 'react-router-dom';
+import { Client, Databases,Storage, Role,ID } from "appwrite";
+import { Permission } from 'appwrite';
+
+ const client = new Client();
+client
+  .setEndpoint('https://cloud.appwrite.io/v1')  
+  .setProject('67d49957000883a68009');  
+
+  const storage = new Storage(client);
 
 function UploadResume() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadedFile, setUploadedFile] = useState(null);
+  const [appwriteFileId, setAppwriteFileId] = useState(null);
   const navigate = useNavigate();
 
   const onDrop = async (acceptedFiles) => {
@@ -19,13 +29,20 @@ function UploadResume() {
     setUploadedFile(file);
     
     try {
-      const formData = new FormData();
-      formData.append('file', file); // Make sure to use 'file' as the key name to match the API expectation
+       const appwriteFile = await uploadToAppwrite(file);
+      setAppwriteFileId(appwriteFile.$id);
       
-      const response = await fetch('https://backend-for-job-scrap.onrender.com/extract_resume', {
+       const fileUrl = getAppwriteFileUrl(appwriteFile.$id);
+      console.log('File stored in Appwrite with ID:', appwriteFile.$id);
+      console.log('File URL:', fileUrl);
+      
+       const formData = new FormData();
+      formData.append('file', file); 
+    
+      
+       const response = await fetch('https://backend-for-job-scrap.onrender.com/extract_resume', {
         method: 'POST',
         body: formData,
-        // Don't set Content-Type header when using FormData
       });
       
       if (!response.ok) {
@@ -35,15 +52,56 @@ function UploadResume() {
       const data = await response.json();
       console.log('Resume data:', data);
       
-      // Navigate to the results page with the data
-      navigate('/search-for-jobs', { state: { resumeData: data } });
+       navigate('/search-for-jobs', { 
+        state: { 
+          resumeData: data,
+          fileId: appwriteFile.$id,
+          fileUrl: fileUrl 
+        } 
+      });
       
     } catch (error) {
       console.error('Error uploading file:', error);
       alert('Failed to upload file. Please try again.');
+      
+       if (appwriteFileId) {
+        try {
+          await storage.deleteFile('67d499a0001ceec255c8', appwriteFileId);
+          console.log('Cleaned up Appwrite file after backend failure');
+        } catch (cleanupError) {
+          console.error('Error cleaning up Appwrite file:', cleanupError);
+        }
+      }
     } finally {
       setIsUploading(false);
     }
+  };
+
+  const uploadToAppwrite = async (file) => {
+    try {
+        const result = await storage.createFile(
+            '67d499a0001ceec255c8',   
+            ID.unique(),
+            file,
+            [
+                Permission.read(Role.any()),  
+                Permission.write(Role.any())  
+              ],
+            (progress) => {
+                console.log(`Upload progress: ${progress.progress}%`);
+            }
+        );
+        console.log("File uploaded:", result);
+        return result;
+    } catch (error) {
+        console.error('Appwrite upload error:', error.message);
+        throw new Error('Failed to upload to Appwrite storage');
+    }
+};
+ 
+
+   const getAppwriteFileUrl = (fileId) => {
+    return storage.getFileView('67d499a0001ceec255c8', fileId);
   };
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({

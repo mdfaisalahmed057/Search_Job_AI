@@ -1,19 +1,37 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { Client, Databases, ID } from 'appwrite'; // Import Appwrite libraries
 
+const client = new Client();
+client
+  .setEndpoint('https://cloud.appwrite.io/v1') // Replace with your Appwrite endpoint
+  .setProject('67d49957000883a68009'); // Replace with your project ID
+
+const databases = new Databases(client);
 function SearchForJobs() {
   const location = useLocation();
   const navigate = useNavigate();
   const resumeData = location.state?.resumeData;
-  
+  const databases = new Databases(client);
+
   const [isSearching, setIsSearching] = useState(false);
   const [jobResults, setJobResults] = useState(null);
+  const [searchCount, setSearchCount] = useState(0);
+  const [showTrialExpiredPopup, setShowTrialExpiredPopup] = useState(false);
   const [searchParams, setSearchParams] = useState({
     role: "",
     location: resumeData?.location?.split(',')[0] || "",
     skills: resumeData?.skills?.technical?.slice(0, 3) || [],
     num_jobs: 10
   });
+
+  // Load search count from localStorage on component mount
+  useEffect(() => {
+    const savedSearchCount = localStorage.getItem('jobSearchCount');
+    if (savedSearchCount) {
+      setSearchCount(parseInt(savedSearchCount));
+    }
+  }, []);
 
   // Redirect if no resume data
   useEffect(() => {
@@ -46,6 +64,21 @@ function SearchForJobs() {
     const updatedSkills = searchParams.skills.filter((_, i) => i !== index);
     setSearchParams({ ...searchParams, skills: updatedSkills });
   };
+  const storeSearchPayloadInAppwrite = async (payload) => {
+    try {
+       const response = await databases.createDocument(
+        '67dd9482000ed36d23d9',
+        '67dd949a0019db0f8edd',
+        ID.unique(),
+        payload
+      );
+      console.log('Search payload stored in Appwrite:', response);
+      return response;
+    } catch (error) {
+      console.error('Error storing search payload in Appwrite:', error);
+      throw error;
+    }
+  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -54,6 +87,15 @@ function SearchForJobs() {
 
   const searchJobs = async (e) => {
     e.preventDefault();
+    
+    // Check if user has reached search limit
+    const currentCount = searchCount + 1;
+    
+    if (currentCount > 4) {
+      setShowTrialExpiredPopup(true);
+      return;
+    }
+    
     setIsSearching(true);
     setJobResults(null); // Clear previous results when starting a new search
     
@@ -63,11 +105,12 @@ function SearchForJobs() {
       
       const payload = {
         role: searchParams.role,
-        location: searchParams.location,
+        location: 'india',
         skills: filteredSkills,
         num_jobs: parseInt(searchParams.num_jobs)
       };
-      
+      await storeSearchPayloadInAppwrite(payload);
+
       const response = await fetch('https://backend-for-job-scrap.onrender.com/api/jobs', {
         method: 'POST',
         headers: {
@@ -83,6 +126,10 @@ function SearchForJobs() {
       const data = await response.json();
       setJobResults(data);
       
+      // Update search count in state and localStorage
+      setSearchCount(currentCount);
+      localStorage.setItem('jobSearchCount', currentCount.toString());
+      
       // Scroll to results after they load
       setTimeout(() => {
         document.getElementById('results-section')?.scrollIntoView({ behavior: 'smooth' });
@@ -94,6 +141,17 @@ function SearchForJobs() {
     } finally {
       setIsSearching(false);
     }
+  };
+
+  const closeTrialExpiredPopup = () => {
+    setShowTrialExpiredPopup(false);
+  };
+
+  const resetTrialCount = () => {
+    // For development/testing purposes only
+    localStorage.removeItem('jobSearchCount');
+    setSearchCount(0);
+    setShowTrialExpiredPopup(false);
   };
 
   const copyToClipboard = (url, jobId) => {
@@ -129,6 +187,15 @@ function SearchForJobs() {
           <h2 className="text-center text-2xl md:text-3xl font-bold text-white mb-6">
             Find Your Perfect Job
           </h2>
+          
+          {/* Search count indicator */}
+          <div className="w-full flex justify-center mb-4">
+            <div className="bg-purple-500/20 rounded-full px-4 py-1">
+              <span className="text-purple-200 text-sm">
+                Searches remaining: {Math.max(0, 3 - searchCount)} of 4
+              </span>
+            </div>
+          </div>
   
           {/* Search Form */}
           <div className="bg-black/40 backdrop-blur-md rounded-lg p-6 mb-8 border border-purple-500/30 shadow-lg shadow-purple-500/10">
@@ -217,14 +284,16 @@ function SearchForJobs() {
               <div className="mt-8 flex justify-center">
                 <button
                   type="submit"
-                  disabled={isSearching}
-                  className={`px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-600 rounded-md text-white font-medium shadow-lg hover:from-purple-600 hover:to-pink-700 transition-all ${isSearching ? 'opacity-70 cursor-not-allowed' : ''} transform hover:scale-105 active:scale-95`}
+                  disabled={isSearching || searchCount >= 4}
+                  className={`px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-600 rounded-md text-white font-medium shadow-lg hover:from-purple-600 hover:to-pink-700 transition-all ${(isSearching || searchCount >= 4) ? 'opacity-70 cursor-not-allowed' : ''} transform hover:scale-105 active:scale-95`}
                 >
                   {isSearching ? (
                     <div className="flex items-center">
                       <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
                       <span>Searching...</span>
                     </div>
+                  ) : searchCount >=4 ? (
+                    'Free Trial Expired'
                   ) : (
                     'Search Jobs'
                   )}
@@ -232,6 +301,8 @@ function SearchForJobs() {
               </div>
             </form>
           </div>
+          
+   
           
           {/* Full-screen loader */}
           {isSearching && (
@@ -261,25 +332,25 @@ function SearchForJobs() {
 
               {/* Failed Requests Section (if any) */}
               {jobResults.failed_requests && jobResults.failed_requests.length > 0 && (
-  <div className="mb-6 p-4 bg-red-500/20 border border-red-500/30 rounded-lg">
-    <h4 className="text-white text-md font-semibold mb-2">Some sources couldn't be reached:</h4>
-    <ul className="text-sm text-gray-300">
-      {jobResults.failed_requests.map((failure, index) => (
-        <li key={index} className="mb-1">
-          {failure.portal}: {failure.message} (Status: {failure.status})
-          <a 
-            href={failure.url} 
-            target="_blank" 
-            rel="noopener noreferrer" 
-            className="ml-2 inline-block px-2 py-1 bg-gray-700 hover:bg-gray-600 text-white text-xs font-medium rounded transition-colors"
-          >
-            Try Manually
-          </a>
-        </li>
-      ))}
-    </ul>
-  </div>
-)}
+                <div className="mb-6 p-4 bg-red-500/20 border border-red-500/30 rounded-lg">
+                  <h4 className="text-white text-md font-semibold mb-2">Some sources couldn't be reached:</h4>
+                  <ul className="text-sm text-gray-300">
+                    {jobResults.failed_requests.map((failure, index) => (
+                      <li key={index} className="mb-1">
+                        {failure.portal}: {failure.message} (Status: {failure.status})
+                        <a 
+                          href={failure.url} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="ml-2 inline-block px-2 py-1 bg-gray-700 hover:bg-gray-600 text-white text-xs font-medium rounded transition-colors"
+                        >
+                          Try Manually
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {jobResults.jobs.map((job, index) => (
@@ -338,8 +409,6 @@ function SearchForJobs() {
                           </div>
                         </div>
                       )}
-  
-                      {/* Remove cover letter section since it's not in the data */}
   
                       <div className="mt-4 flex justify-between items-center">
                         <a 

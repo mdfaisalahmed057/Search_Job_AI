@@ -45,10 +45,8 @@ export default function Navbar() {
       </a>
 
       <div className="hidden md:flex items-center space-x-8">
-        <NavLink  >Features</NavLink>
-        <NavLink  >How it Works</NavLink>
-        <NavLink  >Examples</NavLink>
-        <NavLink >Pricing</NavLink>
+         <NavLink  >What's Up</NavLink>
+  
       </div>
 
       <div className="hidden md:flex items-center space-x-4">
