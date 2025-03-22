@@ -2,6 +2,7 @@ import Navbar from "../components/Navbar"
 import Testimonials from "../components/Testimonials"
 import { SparklesCore } from "../components/Sparkles"
 import Hero from "../components/Hero"
+import { Footer } from "../components/Footer"
 function LandingPage() {
   return (
     <main className="min-h-screen bg-black/[0.96] antialiased bg-grid-white/[0.02] relative overflow-hidden">
@@ -22,6 +23,7 @@ function LandingPage() {
         <Navbar />
         <Hero />
         <Testimonials />
+<Footer/>
       </div>
     </main>
   )
