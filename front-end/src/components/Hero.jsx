@@ -127,7 +127,7 @@ export default function Hero() {
                   playsInline
                   onLoadedData={handleVideoLoaded}
                 >
-                  <source src="/src/assets/showcase.mp4" type="video/mp4" />
+                  <source src="https://cloud.appwrite.io/v1/storage/buckets/67d499a0001ceec255c8/files/67de9f5e000715179055/view?project=67d49957000883a68009&mode=admin" type="video/mp4" />
                   Your browser does not support the video tag.
                 </video>
 
