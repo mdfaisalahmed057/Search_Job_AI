@@ -134,7 +134,7 @@ function SearchForJobs() {
       };
       await storeSearchPayloadInAppwrite(payload);
 
-      const response = await fetch('https://backend-for-job-scrap.onrender.com/api/jobs/api/jobs', {
+      const response = await fetch('https://backend-for-job-scrap.onrender.com/api/jobs', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
