@@ -13,11 +13,22 @@ from urllib.parse import urlparse, urljoin
 import time
 import random
 from flask_cors import CORS
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 app = Flask(__name__)
 
-genai.configure(api_key="AIzaSyBfURPNNKcN8c5JJRdj8pSQSNAYNAkJT7s")
+# Configure Gemini API using environment variable
+gemini_api_key = os.environ.get("GEMINI_API_KEY")
+if gemini_api_key:
+    genai.configure(api_key=gemini_api_key)
+else:
+    print("Warning: GEMINI_API_KEY not found in environment.")
+
 CORS(app)  # Enables CORS for all routes
+
 
 
 
@@ -452,6 +463,54 @@ def extract_resume_text(file_path):
 
 import json
 
+def call_gemini(prompt):
+    """Call Gemini using the google-generativeai SDK."""
+    model = genai.GenerativeModel("gemini-2.0-flash")
+    response = model.generate_content(prompt)
+    if not response.text:
+        raise ValueError("Gemini returned empty response")
+    return response.text
+
+def call_groq(prompt, api_key):
+    """Call Groq API via direct HTTP request."""
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "llama-3.3-70b-versatile",
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.1
+    }
+    response = requests.post(url, headers=headers, json=payload, timeout=30)
+    response.raise_for_status()
+    res_json = response.json()
+    if 'choices' in res_json and len(res_json['choices']) > 0:
+        return res_json['choices'][0]['message']['content']
+    raise ValueError(f"Unexpected Groq API response structure: {res_json}")
+
+def call_openrouter(prompt, api_key):
+    """Call OpenRouter API via direct HTTP request."""
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "http://localhost:10000",
+        "X-Title": "Search Jobs AI Backend"
+    }
+    payload = {
+        "model": "google/gemini-2.0-flash-001",
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.1
+    }
+    response = requests.post(url, headers=headers, json=payload, timeout=30)
+    response.raise_for_status()
+    res_json = response.json()
+    if 'choices' in res_json and len(res_json['choices']) > 0:
+        return res_json['choices'][0]['message']['content']
+    raise ValueError(f"Unexpected OpenRouter API response structure: {res_json}")
+
 def get_structured_resume_data(text):
     prompt = f"""
     Extract and format the following resume details from the text in **strict JSON format**:
@@ -509,19 +568,68 @@ def get_structured_resume_data(text):
     }}
     """
 
-    model = genai.GenerativeModel("gemini-2.0-flash")
-    response = model.generate_content(prompt)
-    
-    # Clean up the response and extract just the JSON part
-    raw_text = response.text.strip()
+    raw_text = None
+    errors = []
+
+    # 1. Try Gemini
+    try:
+        print("Attempting resume extraction with Gemini...")
+        raw_text = call_gemini(prompt)
+    except Exception as e:
+        err_msg = f"Gemini failed: {str(e)}"
+        print(err_msg)
+        errors.append(err_msg)
+
+    # 2. Try Groq (if Gemini failed)
+    if not raw_text:
+        groq_api_key = os.environ.get("GROQ_API_KEY")
+        if groq_api_key:
+            try:
+                print("Attempting resume extraction with Groq...")
+                raw_text = call_groq(prompt, groq_api_key)
+            except Exception as e:
+                err_msg = f"Groq failed: {str(e)}"
+                print(err_msg)
+                errors.append(err_msg)
+        else:
+            print("Groq API key not found in environment, skipping Groq fallback.")
+            errors.append("Groq API key not found in environment.")
+
+    # 3. Try OpenRouter (if both Gemini and Groq failed)
+    if not raw_text:
+        openrouter_api_key = os.environ.get("OPENROUTER_API_KEY")
+        if openrouter_api_key:
+            try:
+                print("Attempting resume extraction with OpenRouter...")
+                raw_text = call_openrouter(prompt, openrouter_api_key)
+            except Exception as e:
+                err_msg = f"OpenRouter failed: {str(e)}"
+                print(err_msg)
+                errors.append(err_msg)
+        else:
+            print("OpenRouter API key not found in environment, skipping OpenRouter fallback.")
+            errors.append("OpenRouter API key not found in environment.")
+
+    # If all options failed
+    if not raw_text:
+        return {
+            "error": "All AI extraction attempts failed.",
+            "details": errors
+        }
+
+    raw_text = raw_text.strip()
     
     # Try to find JSON in the response by looking for balanced braces
     start_idx = raw_text.find('{')
     if start_idx == -1:
-        return {"error": "Could not find JSON structure in the response"}
+        return {
+            "error": "Could not find JSON structure in the response",
+            "raw_response": raw_text[:200] + "..." if len(raw_text) > 200 else raw_text
+        }
     
     # Track opening and closing braces to find the complete JSON object
     open_braces = 0
+    json_str = None
     for i in range(start_idx, len(raw_text)):
         if raw_text[i] == '{':
             open_braces += 1
@@ -531,9 +639,12 @@ def get_structured_resume_data(text):
                 # We found the matching closing brace for the first opening brace
                 json_str = raw_text[start_idx:i+1]
                 break
-    else:
-        # If we didn't break out of the loop, we didn't find balanced braces
-        return {"error": "Unbalanced JSON structure in response"}
+    
+    if not json_str:
+        return {
+            "error": "Unbalanced JSON structure in response",
+            "raw_response": raw_text[:200] + "..." if len(raw_text) > 200 else raw_text
+        }
     
     # Try parsing the extracted JSON
     try:
@@ -545,6 +656,7 @@ def get_structured_resume_data(text):
             "error": f"JSON parsing failed: {str(e)}",
             "raw_response": raw_text[:100] + "..." if len(raw_text) > 100 else raw_text
         }
+
 
 @app.route("/extract_resume", methods=["POST"])
 def extract_resume():
@@ -561,31 +673,23 @@ def extract_resume():
     file_path = os.path.join(upload_dir, file.filename)
     file.save(file_path)
     
-    text = extract_resume_text(file_path)
-    if text is None:
-        return jsonify({"error": "Unsupported file format"}), 400
-    
-    structured_data = get_structured_resume_data(text)
-    
-    # Remove file after processing
-    os.remove(file_path)
-    
-    return jsonify(structured_data)
+    try:
+        text = extract_resume_text(file_path)
+        if text is None:
+            return jsonify({"error": "Unsupported file format"}), 400
+        
+        structured_data = get_structured_resume_data(text)
+        
+        # If there is an error in structured_data (i.e. all fallbacks failed)
+        if isinstance(structured_data, dict) and "error" in structured_data:
+            return jsonify(structured_data), 500
+            
+        return jsonify(structured_data)
+    finally:
+        # Always clean up the uploaded file
+        if os.path.exists(file_path):
+            os.remove(file_path)
 
-    if "file" not in request.files:
-        return jsonify({"error": "No file provided"}), 400
-    
-    file = request.files["file"]
-    file_path = f"uploads/{file.filename}"
-    file.save(file_path)
-    
-    text = extract_resume_text(file_path)
-    if text is None:
-        return jsonify({"error": "Unsupported file format"}), 400
-    
-    structured_data = get_structured_resume_data(text)
-    os.remove(file_path)  # Clean up after processing
-    return jsonify(structured_data)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))  # Get port from environment, default to 10000
