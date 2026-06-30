@@ -4,6 +4,7 @@ import { useDropzone } from 'react-dropzone';
 import { useNavigate } from 'react-router-dom';
 import { Client, Databases,Storage, Role,ID } from "appwrite";
 import { Permission } from 'appwrite';
+import { Notification } from '../components/CustomUI';
 
  const client = new Client();
 client
@@ -16,12 +17,13 @@ function UploadResume() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadedFile, setUploadedFile] = useState(null);
   const [appwriteFileId, setAppwriteFileId] = useState(null);
+  const [notification, setNotification] = useState(null);
   const navigate = useNavigate();
 
   const onDrop = async (acceptedFiles) => {
     const file = acceptedFiles[0];
     if (!file || !file.name.toLowerCase().endsWith('.pdf')) {
-      alert('Please upload a PDF file');
+      setNotification({ message: 'Please upload a PDF file', type: 'error' });
       return;
     }
 
@@ -40,7 +42,7 @@ function UploadResume() {
       formData.append('file', file); 
     
       
-       const response = await fetch('https://backend-for-job-scrap.onrender.com/extract_resume', {
+       const response = await fetch('http://127.0.0.1:10000/extract_resume', {
         method: 'POST',
         body: formData,
       });
@@ -62,7 +64,7 @@ function UploadResume() {
       
     } catch (error) {
       console.error('Error uploading file:', error);
-      alert('Failed to upload file. Please try again.');
+      setNotification({ message: 'Failed to upload file. Please try again.', type: 'error' });
       
        if (appwriteFileId) {
         try {
@@ -114,6 +116,13 @@ function UploadResume() {
 
   return (
     <main className="min-h-screen bg-black/[0.96] antialiased bg-grid-white/[0.02] relative overflow-hidden">
+      {notification && (
+        <Notification 
+          message={notification.message} 
+          type={notification.type} 
+          onClose={() => setNotification(null)} 
+        />
+      )}
       <div className="h-full w-full absolute inset-0 z-0">
         <SparklesCore
           id="tsparticlesfullpage"

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Client, Databases, ID } from 'appwrite'; // Import Appwrite libraries
+import { Notification, Input } from '../components/CustomUI';
 
 const client = new Client();
 client
@@ -18,6 +19,9 @@ function SearchForJobs() {
   const [jobResults, setJobResults] = useState(null);
   const [searchCount, setSearchCount] = useState(0);
   const [showTrialExpiredPopup, setShowTrialExpiredPopup] = useState(false);
+  const [activeCoverLetter, setActiveCoverLetter] = useState(null);
+  const [notification, setNotification] = useState(null);
+  const [errors, setErrors] = useState({});
   const [searchParams, setSearchParams] = useState({
     role: "",
     location: resumeData?.location?.split(',')[0] || "",
@@ -83,10 +87,29 @@ function SearchForJobs() {
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setSearchParams({ ...searchParams, [name]: value });
+    if (errors[name]) {
+      setErrors(prev => ({ ...prev, [name]: null }));
+    }
   };
 
   const searchJobs = async (e) => {
     e.preventDefault();
+    
+    // Custom validation
+    const newErrors = {};
+    if (!searchParams.role.trim()) {
+      newErrors.role = "Job Title is required";
+    }
+    if (!searchParams.location.trim()) {
+      newErrors.location = "Location is required";
+    }
+    
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+    
+    setErrors({});
     
     // Check if user has reached search limit
     const currentCount = searchCount + 1;
@@ -111,7 +134,7 @@ function SearchForJobs() {
       };
       await storeSearchPayloadInAppwrite(payload);
 
-      const response = await fetch('https://backend-for-job-scrap.onrender.com/api/jobs', {
+      const response = await fetch('http://127.0.0.1:10000/api/jobs', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -137,7 +160,7 @@ function SearchForJobs() {
       
     } catch (error) {
       console.error('Error searching for jobs:', error);
-      alert('Failed to search for jobs. Please try again.');
+      setNotification({ message: 'Failed to search for jobs. Please try again.', type: 'error' });
     } finally {
       setIsSearching(false);
     }
@@ -154,13 +177,64 @@ function SearchForJobs() {
     setShowTrialExpiredPopup(false);
   };
 
-  const copyToClipboard = (url, jobId) => {
-    navigator.clipboard.writeText(url)
+  const copyToClipboard = (text, elementId) => {
+    navigator.clipboard.writeText(text)
       .then(() => {
-        document.getElementById(`copy-btn-${jobId}`).classList.add('text-green-300');
-        setTimeout(() => {
-          document.getElementById(`copy-btn-${jobId}`).classList.remove('text-green-300');
-        }, 2000);
+        const btn = document.getElementById(elementId);
+        if (btn) {
+          btn.classList.add('text-green-400');
+          const isClBtn = elementId.startsWith('copy-cl-btn');
+          const isModalBtn = elementId === 'modal-copy-cl-btn';
+          
+          if (isModalBtn) {
+            btn.innerHTML = `
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+              </svg>
+              Copied!
+            `;
+          } else if (isClBtn) {
+            btn.innerHTML = `
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+              </svg>
+              Copied!
+            `;
+          } else {
+            btn.innerHTML = `
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+              </svg>
+              Copied!
+            `;
+          }
+          
+          setTimeout(() => {
+            btn.classList.remove('text-green-400');
+            if (isModalBtn) {
+              btn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 00-2 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                </svg>
+                Copy to Clipboard
+              `;
+            } else if (isClBtn) {
+              btn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 00-2 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                </svg>
+                Copy Cover Letter
+              `;
+            } else {
+              btn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                Copy Link
+              `;
+            }
+          }, 2000);
+        }
       })
       .catch(err => {
         console.error('Failed to copy:', err);
@@ -180,6 +254,13 @@ function SearchForJobs() {
 
   return (
     <main className="min-h-screen bg-black/[0.96] antialiased bg-grid-white/[0.02] relative overflow-hidden">
+      {notification && (
+        <Notification 
+          message={notification.message} 
+          type={notification.type} 
+          onClose={() => setNotification(null)} 
+        />
+      )}
       {/* Background sparkles effect */}
   
       <div className="relative z-10 pt-10 px-4 flex flex-col items-center">
@@ -201,33 +282,27 @@ function SearchForJobs() {
           <div className="bg-black/40 backdrop-blur-md rounded-lg p-6 mb-8 border border-purple-500/30 shadow-lg shadow-purple-500/10">
             <form onSubmit={searchJobs}>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label htmlFor="role" className="block text-white text-sm font-medium mb-2">Job Title</label>
-                  <input
-                    type="text"
-                    id="role"
-                    name="role"
-                    value={searchParams.role}
-                    onChange={handleInputChange}
-                    className="w-full bg-black/60 border border-purple-500/50 rounded-md px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
-                    placeholder="Frontend Developer"
-                    required
-                  />
-                </div>
+                <Input
+                  label="Job Title"
+                  type="text"
+                  id="role"
+                  name="role"
+                  value={searchParams.role}
+                  onChange={handleInputChange}
+                  error={errors.role}
+                  placeholder="Frontend Developer"
+                />
                 
-                <div>
-                  <label htmlFor="location" className="block text-white text-sm font-medium mb-2">Location</label>
-                  <input
-                    type="text"
-                    id="location"
-                    name="location"
-                    value={searchParams.location}
-                    onChange={handleInputChange}
-                    className="w-full bg-black/60 border border-purple-500/50 rounded-md px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
-                    placeholder="City or Country"
-                    required
-                  />
-                </div>
+                <Input
+                  label="Location"
+                  type="text"
+                  id="location"
+                  name="location"
+                  value={searchParams.location}
+                  onChange={handleInputChange}
+                  error={errors.location}
+                  placeholder="City or Country"
+                />
               </div>
               
               <div className="mt-6">
@@ -428,11 +503,40 @@ function SearchForJobs() {
                         </span>
                       </div>
 
-                      {/* Add URL copy button */}
-                      <div className="mt-3 flex justify-end">
+                      {/* Actions row */}
+                      <div className="mt-3 pt-3 border-t border-purple-500/10 flex justify-between items-center">
+                        <div>
+                          {job.cover_letter && (
+                            <div className="flex items-center gap-2">
+                              <button 
+                                id={`copy-cl-btn-${index}`}
+                                onClick={() => copyToClipboard(job.cover_letter, `copy-cl-btn-${index}`)}
+                                className="text-xs text-pink-400 hover:text-pink-300 transition-colors focus:outline-none flex items-center"
+                                title="Copy cover letter"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 00-2 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                                </svg>
+                                Copy Cover Letter
+                              </button>
+                              <span className="text-purple-500/30 text-xs">|</span>
+                              <button 
+                                onClick={() => setActiveCoverLetter({
+                                  jobTitle: job.job_title,
+                                  company: job.company,
+                                  coverLetter: job.cover_letter
+                                })}
+                                className="text-xs text-purple-400 hover:text-purple-300 transition-colors focus:outline-none"
+                                title="View cover letter"
+                              >
+                                View
+                              </button>
+                            </div>
+                          )}
+                        </div>
                         <button 
                           id={`copy-btn-${index}`}
-                          onClick={() => copyToClipboard(job.application_link, index)}
+                          onClick={() => copyToClipboard(job.application_link, `copy-btn-${index}`)}
                           className="text-xs text-purple-400 hover:text-purple-300 transition-colors focus:outline-none flex items-center"
                           title="Copy job link"
                         >
@@ -482,6 +586,51 @@ function SearchForJobs() {
           )}
         </div> {/* Closes .w-full max-w-5xl */}
       </div> {/* Closes the outer container */}
+
+      {/* Cover Letter Modal */}
+      {activeCoverLetter && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fadeIn">
+          <div className="bg-zinc-900/90 border border-purple-500/30 rounded-xl max-w-2xl w-full max-h-[80vh] flex flex-col shadow-2xl shadow-purple-500/20">
+            <div className="p-6 border-b border-purple-500/20 flex justify-between items-start">
+              <div>
+                <h3 className="text-xl font-bold text-white">Cover Letter</h3>
+                <p className="text-sm text-purple-300 mt-1">{activeCoverLetter.jobTitle} at {activeCoverLetter.company}</p>
+              </div>
+              <button 
+                onClick={() => setActiveCoverLetter(null)}
+                className="text-gray-400 hover:text-white transition-colors p-1 rounded-lg hover:bg-white/5"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-grow text-gray-300 whitespace-pre-wrap font-sans text-sm leading-relaxed select-text">
+              {activeCoverLetter.coverLetter}
+            </div>
+            
+            <div className="p-6 border-t border-purple-500/20 flex justify-end gap-3">
+              <button
+                onClick={() => setActiveCoverLetter(null)}
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-md text-sm transition-colors"
+              >
+                Close
+              </button>
+              <button
+                id="modal-copy-cl-btn"
+                onClick={() => copyToClipboard(activeCoverLetter.coverLetter, 'modal-copy-cl-btn')}
+                className="px-5 py-2 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white rounded-md text-sm font-medium transition-all flex items-center shadow-lg shadow-purple-500/10"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 00-2 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                </svg>
+                Copy to Clipboard
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

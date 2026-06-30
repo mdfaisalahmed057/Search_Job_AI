@@ -6,7 +6,7 @@ import UploadResume from "./pages/UploadResume";
 import SearchForJobs from "./pages/SearchForJobs";
  function App() {
   return (
-    <Router>
+    <Router> 
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/upload" element={<UploadResume />} />
