@@ -42,7 +42,7 @@ function UploadResume() {
       formData.append('file', file); 
     
       
-       const response = await fetch('http://127.0.0.1:10000/extract_resume', {
+       const response = await fetch('https://backend-for-job-scrap.onrender.com/api/jobs/extract_resume', {
         method: 'POST',
         body: formData,
       });
